@@ -20,6 +20,10 @@ inputs:
   github-token:
     description: User token with permission to create issues and assign them to Copilot on the target repository.
     required: true
+  assign-to-copilot:
+    description: Whether to assign created or updated issues to Copilot.
+    required: false
+    default: 'true'
   target-repo:
     description: The GitHub repository to create issues in, in OWNER/REPO form.
     required: false
@@ -67,6 +71,7 @@ runs:
       ADO_LABEL: ${{ inputs.azure-devops-label }}
       TARGET_REPO: ${{ inputs.target-repo }}
       GH_TOKEN: ${{ inputs.github-token }}
+      ASSIGN_TO_COPILOT: ${{ inputs.assign-to-copilot }}
     run: |
       set -euo pipefail
 
@@ -88,27 +93,35 @@ runs:
         local title="$1"
         local body="$2"
         local state="${3:-}"
+        local assign_copilot="${ASSIGN_TO_COPILOT:-true}"
 
         jq -n \
           --arg title "$title" \
           --arg body "$body" \
           --arg target_repo "$TARGET_REPO" \
           --arg state "$state" \
+          --argjson assign_copilot "$([ "$assign_copilot" = "true" ] && echo true || echo false)" \
           '{
             title: $title,
             body: $body,
+            labels: ["azure-devops"]
+          } + (if $assign_copilot then {
             labels: ["azure-devops", "copilot"],
             assignees: ["copilot-swe-agent[bot]"],
             agent_assignment: {
               target_repo: $target_repo
             }
-          } + (if $state == "" then {} else {state: $state} end)'
+          } else {} end)
+          + (if $state == "" then {} else {state: $state} end)'
       }
 
       # Ensure the labels we apply exist; ignore "already exists" errors.
-      for label in azure-devops copilot; do
+      for label in azure-devops; do
         gh label create "$label" --repo "$TARGET_REPO" --force >/dev/null 2>&1 || true
       done
+      if [ "$ASSIGN_TO_COPILOT" = "true" ]; then
+        gh label create "copilot" --repo "$TARGET_REPO" --force >/dev/null 2>&1 || true
+      fi
 
       wiql_body="$(
         jq -n --arg label "$ADO_LABEL" \
@@ -179,7 +192,7 @@ runs:
             --input - <<<"$payload" \
             >/dev/null
 
-          echo "Updated GitHub issue #$existing_issue_number for work item $id and assigned Copilot."
+          echo "Updated GitHub issue #$existing_issue_number for work item $id."
           continue
         fi
 
