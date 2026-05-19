@@ -18,7 +18,7 @@ inputs:
     description: The tenant ID of the Azure AD application used for OIDC login.
     required: true
   github-token:
-    description: GitHub token with permission to create issues on the target repository.
+    description: GitHub token with permission to create issues and assign them to Copilot on the target repository.
     required: true
   target-repo:
     description: The GitHub repository to create issues in, in OWNER/REPO form.
@@ -65,6 +65,27 @@ runs:
           "$@"
       }
 
+      build_issue_payload() {
+        local title="$1"
+        local body="$2"
+        local state="${3:-}"
+
+        jq -n \
+          --arg title "$title" \
+          --arg body "$body" \
+          --arg target_repo "$TARGET_REPO" \
+          --arg state "$state" \
+          '{
+            title: $title,
+            body: $body,
+            labels: ["azure-devops", "copilot"],
+            assignees: ["copilot-swe-agent[bot]"],
+            agent_assignment: {
+              target_repo: $target_repo
+            }
+          } + (if $state == "" then {} else {state: $state} end)'
+      }
+
       # Ensure the labels we apply exist; ignore "already exists" errors.
       for label in azure-devops copilot; do
         gh label create "$label" --repo "$TARGET_REPO" --force >/dev/null 2>&1 || true
@@ -92,18 +113,6 @@ runs:
       for id in $ids; do
         marker="azure-devops-work-item-id: $id"
 
-        existing="$(
-          gh api --paginate \
-            "/repos/$TARGET_REPO/issues?state=all&labels=azure-devops&per_page=100" \
-            --jq "[.[] | select((.body // \"\") | contains(\"$marker\"))] | length" \
-            | paste -sd+ - \
-            | bc
-        )"
-        if [ "${existing:-0}" -gt 0 ]; then
-          echo "Skipping work item $id; GitHub issue already exists."
-          continue
-        fi
-
         item="$(
           ado_call "$ADO_ORG/$ADO_PROJECT/_apis/wit/workitems/$id?api-version=7.1"
         )"
@@ -128,16 +137,35 @@ runs:
               + "| Field | Value |\n| --- | --- |\n"
               + "| ID | " + $id + " |\n"
               + "| Type | " + $type + " |\n"
-              + "| State | " + $state + " |\n\n"
-              + "## Description\n\n" + $description'
+               + "| State | " + $state + " |\n\n"
+               + "## Description\n\n" + $description'
         )"
 
+        issue_title="[ADO #$id] $title"
+        existing_issue_number="$(
+          gh api --paginate \
+            "/repos/$TARGET_REPO/issues?state=all&labels=azure-devops&per_page=100" \
+            --jq ".[] | select((.body // \"\") | contains(\"$marker\")) | .number" \
+            | head -n 1
+        )"
+
+        if [ -n "$existing_issue_number" ]; then
+          payload="$(build_issue_payload "$issue_title" "$body" "open")"
+
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/$TARGET_REPO/issues/$existing_issue_number" \
+            --input - <<<"$payload" \
+            >/dev/null
+
+          echo "Updated GitHub issue #$existing_issue_number for work item $id and assigned Copilot."
+          continue
+        fi
+
         payload="$(
-          jq -n \
-            --arg title "[ADO #$id] $title" \
-            --arg body "$body" \
-            '{title: $title, body: $body,
-              labels: ["azure-devops", "copilot"]}'
+          build_issue_payload "$issue_title" "$body"
         )"
 
         issue_number="$(
