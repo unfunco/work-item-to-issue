@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/unfunco/work-item-to-issue/compare/v0.1.0...v0.1.1) (2026-05-19)
+
+
+### 🧹 Miscellaneous
+
+* Use ubuntu-slim runner ([#10](https://github.com/unfunco/work-item-to-issue/issues/10)) ([ebcc9d1](https://github.com/unfunco/work-item-to-issue/commit/ebcc9d1f09298392b0038364fbfb7e7cffee89b4))
+
 ## 0.1.0 (2026-05-19)
 
 
