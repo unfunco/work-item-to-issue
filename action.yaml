@@ -137,8 +137,7 @@ runs:
             --arg title "[ADO #$id] $title" \
             --arg body "$body" \
             '{title: $title, body: $body,
-              labels: ["azure-devops", "copilot"],
-              assignees: ["Copilot"]}'
+              labels: ["azure-devops", "copilot"]}'
         )"
 
         issue_number="$(
