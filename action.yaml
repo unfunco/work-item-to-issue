@@ -18,7 +18,7 @@ inputs:
     description: The tenant ID of the Azure AD application used for OIDC login.
     required: true
   github-token:
-    description: GitHub token with permission to create issues and assign them to Copilot on the target repository.
+    description: User token with permission to create issues and assign them to Copilot on the target repository.
     required: true
   target-repo:
     description: The GitHub repository to create issues in, in OWNER/REPO form.

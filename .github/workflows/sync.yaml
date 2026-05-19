@@ -14,6 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
+    - name: Require a Copilot user token
+      env:
+        COPILOT_USER_TOKEN: ${{ secrets.COPILOT_USER_TOKEN }}
+      run: |
+        if [ -z "$COPILOT_USER_TOKEN" ]; then
+          echo "::error::Set the COPILOT_USER_TOKEN repository secret to a user token. GITHUB_TOKEN cannot assign issues to Copilot."
+          exit 1
+        fi
     - uses: ./.
       with:
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -21,4 +29,4 @@ jobs:
         azure-devops-project: website
         azure-devops-label: "copilot:ready"
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+        github-token: ${{ secrets.COPILOT_USER_TOKEN }}
