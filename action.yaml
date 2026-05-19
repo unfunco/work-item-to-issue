@@ -11,9 +11,6 @@ inputs:
   azure-tenant-id:
     description: The tenant ID of the Azure AD application used for OIDC login.
     required: true
-  azure-subscription-id:
-    description: The Azure subscription ID associated with the Azure AD application.
-    required: true
 
 outputs:
   issue-ids:
@@ -28,7 +25,6 @@ runs:
     with:
       client-id: ${{ inputs.azure-client-id }}
       tenant-id: ${{ inputs.azure-tenant-id }}
-      subscription-id: ${{ inputs.azure-subscription-id }}
       allow-no-subscriptions: true
   - name: Fetch Work Items
     id: create-issues
