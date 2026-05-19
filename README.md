@@ -18,7 +18,7 @@ jobs:
       contents: read
       id-token: write
       issues: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Sync work items to GitHub issues
         uses: unfunco/work-item-to-issue@v0.1.0
