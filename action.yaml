@@ -120,7 +120,10 @@ runs:
         title="$(jq -r '.fields["System.Title"] // "Untitled work item"' <<<"$item")"
         state="$(jq -r '.fields["System.State"] // "Unknown"' <<<"$item")"
         type="$(jq -r '.fields["System.WorkItemType"] // "Unknown"' <<<"$item")"
-        description="$(jq -r '.fields["System.Description"] // "_No description provided._"' <<<"$item")"
+        description="$(
+          jq -r '.fields["System.Description"]
+            | if . == null or . == "" then "_No description provided._" else . end' <<<"$item"
+        )"
         url="$ADO_ORG/$ADO_PROJECT/_workitems/edit/$id"
 
         body="$(
