@@ -122,9 +122,8 @@ runs:
       ids="$(
         ado_call \
           --data "$wiql_body" \
-          "$ADO_ORG/$ADO_PROJECT/_apis/wit/wiql?api-version=7.1" \
-          | jq -r '.workItems[].id' \
-          | head -25
+          "$ADO_ORG/$ADO_PROJECT/_apis/wit/wiql?api-version=7.1&\$top=25" \
+          | jq -r '(.workItems // [])[].id'
       )"
 
       created=()
@@ -162,12 +161,12 @@ runs:
         )"
 
         issue_title="[ADO #$id] $title"
-        existing_issue_number="$(
+        matches="$(
           gh api --paginate \
             "/repos/$TARGET_REPO/issues?state=all&labels=azure-devops&per_page=100" \
-            --jq ".[] | select((.body // \"\") | contains(\"$marker_comment\")) | .number" \
-            | head -n 1
+            --jq ".[] | select((.body // \"\") | contains(\"$marker_comment\")) | .number"
         )"
+        existing_issue_number="${matches%%$'\n'*}"
 
         if [ -n "$existing_issue_number" ]; then
           payload="$(build_issue_payload "$issue_title" "$body" "open")"
