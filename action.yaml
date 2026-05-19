@@ -44,11 +44,10 @@ runs:
 
       wiql="$(
         jq -n \
-          --arg project "$ADO_PROJECT" \
           --arg label "$ADO_LABEL" \
           '{query: ("SELECT [System.Id] FROM WorkItems "
             + "WHERE [System.TeamProject] = @project "
-            + "AND [System.Tags] CONTAINS @label "
+            + "AND [System.Tags] CONTAINS \"" + $label + "\" "
             + "AND [System.State] NOT IN (\"Closed\", \"Removed\", \"Done\") "
             + "ORDER BY [System.ChangedDate] DESC")}'
       )"
