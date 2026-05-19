@@ -1,0 +1,20 @@
+name: Sync Azure DevOps to GitHub
+
+on:
+  workflow_dispatch: { }
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: ./.
+      with:
+        azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        azure-devops-url: https://dev.azure.com/honestempire
+        azure-subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}

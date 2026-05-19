@@ -1,0 +1,77 @@
+name: Create Work Item
+description: Create GitHub Issues from Azure DevOps Work Items.
+
+inputs:
+  azure-devops-url:
+    description: The URL of the Azure DevOps organization.
+    required: true
+  azure-client-id:
+    description: The client ID of the Azure AD application used for OIDC login.
+    required: true
+  azure-tenant-id:
+    description: The tenant ID of the Azure AD application used for OIDC login.
+    required: true
+  azure-subscription-id:
+    description: The Azure subscription ID associated with the Azure AD application.
+    required: true
+
+outputs:
+  issue-ids:
+    description: The IDs of the created GitHub Issues.
+    value: ${{ steps.create-issues.outputs.issue-ids }}
+
+runs:
+  using: composite
+  steps:
+  - name: Configure Azure credentials
+    uses: azure/login@v3
+    with:
+      client-id: ${{ inputs.azure-client-id }}
+      tenant-id: ${{ inputs.azure-tenant-id }}
+      subscription-id: ${{ inputs.azure-subscription-id }}
+  - name: Fetch Work Items
+    id: create-issues
+    env:
+      ADO_PROJECT: website
+      ADO_ORG: ${{ inputs.azure-devops-url }}
+      ADO_LABEL: "copilot:ready"
+    run: |
+      set -euo pipefail
+
+      bearer_token="$(
+        az account get-access-token \
+          --scope "499b84ac-1321-427f-aa17-267ca6975798/.default" \
+          --query "accessToken" \
+          -o "tsv"
+      )"
+
+      wiql="$(
+        jq -n \
+          --arg project "$ADO_PROJECT" \
+          --arg label "$ADO_LABEL" \
+          '{query: ("SELECT [System.Id] FROM WorkItems "
+            + "WHERE [System.TeamProject] = @project "
+            + "AND [System.Tags] CONTAINS @label "
+            + "AND [System.State] NOT IN (\"Closed\", \"Removed\", \"Done\") "
+            + "ORDER BY [System.ChangedDate] DESC")}'
+      )"
+
+      response="$(
+        curl -fsS \
+          -H "Authorization: Bearer $bearer_token" \
+          -H "Content-Type: application/json" \
+          --data "$wiql" \
+          "$ADO_ORG/$ADO_PROJECT/_apis/wit/wiql?api-version=7.1"
+      )"
+
+      ids="$(printf '%s' "$response" | jq -r '.workItems[].id' | head -25)"
+
+      echo "Found work item IDs:"
+      printf '%s\n' "$ids"
+
+      {
+        echo "issue-ids<<EOF"
+        printf '%s\n' "$ids"
+        echo "EOF"
+      } >> "$GITHUB_OUTPUT"
+    shell: bash
