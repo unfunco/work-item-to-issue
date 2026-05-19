@@ -5,17 +5,30 @@ inputs:
   azure-devops-url:
     description: The URL of the Azure DevOps organization.
     required: true
+  azure-devops-project:
+    description: The Azure DevOps project to query.
+    required: true
+  azure-devops-label:
+    description: The Azure DevOps tag used to select work items.
+    required: true
   azure-client-id:
     description: The client ID of the Azure AD application used for OIDC login.
     required: true
   azure-tenant-id:
     description: The tenant ID of the Azure AD application used for OIDC login.
     required: true
+  github-token:
+    description: GitHub token with permission to create issues on the target repository.
+    required: true
+  target-repo:
+    description: The GitHub repository to create issues in, in OWNER/REPO form.
+    required: false
+    default: ${{ github.repository }}
 
 outputs:
-  issue-ids:
-    description: The IDs of the created GitHub Issues.
-    value: ${{ steps.create-issues.outputs.issue-ids }}
+  issue-numbers:
+    description: Comma-separated list of issue numbers created by this run.
+    value: ${{ steps.sync.outputs.issue-numbers }}
 
 runs:
   using: composite
@@ -26,25 +39,39 @@ runs:
       client-id: ${{ inputs.azure-client-id }}
       tenant-id: ${{ inputs.azure-tenant-id }}
       allow-no-subscriptions: true
-  - name: Fetch Work Items
-    id: create-issues
+  - name: Sync work items to GitHub issues
+    id: sync
+    shell: bash
     env:
-      ADO_PROJECT: website
       ADO_ORG: ${{ inputs.azure-devops-url }}
-      ADO_LABEL: "copilot:ready"
+      ADO_PROJECT: ${{ inputs.azure-devops-project }}
+      ADO_LABEL: ${{ inputs.azure-devops-label }}
+      TARGET_REPO: ${{ inputs.target-repo }}
+      GH_TOKEN: ${{ inputs.github-token }}
     run: |
       set -euo pipefail
 
-      bearer_token="$(
+      ado_token="$(
         az account get-access-token \
           --scope "499b84ac-1321-427f-aa17-267ca6975798/.default" \
           --query "accessToken" \
           -o "tsv"
       )"
 
-      wiql="$(
-        jq -n \
-          --arg label "$ADO_LABEL" \
+      ado_call() {
+        curl -fsS \
+          -H "Authorization: Bearer $ado_token" \
+          -H "Content-Type: application/json" \
+          "$@"
+      }
+
+      # Ensure the labels we apply exist; ignore "already exists" errors.
+      for label in azure-devops copilot; do
+        gh label create "$label" --repo "$TARGET_REPO" --force >/dev/null 2>&1 || true
+      done
+
+      wiql_body="$(
+        jq -n --arg label "$ADO_LABEL" \
           '{query: ("SELECT [System.Id] FROM WorkItems "
             + "WHERE [System.TeamProject] = @project "
             + "AND [System.Tags] CONTAINS \"" + $label + "\" "
@@ -52,22 +79,85 @@ runs:
             + "ORDER BY [System.ChangedDate] DESC")}'
       )"
 
-      response="$(
-        curl -fsS \
-          -H "Authorization: Bearer $bearer_token" \
-          -H "Content-Type: application/json" \
-          --data "$wiql" \
-          "$ADO_ORG/$ADO_PROJECT/_apis/wit/wiql?api-version=7.1"
+      ids="$(
+        ado_call \
+          --data "$wiql_body" \
+          "$ADO_ORG/$ADO_PROJECT/_apis/wit/wiql?api-version=7.1" \
+          | jq -r '.workItems[].id' \
+          | head -25
       )"
 
-      ids="$(printf '%s' "$response" | jq -r '.workItems[].id' | head -25)"
+      created=()
 
-      echo "Found work item IDs:"
-      printf '%s\n' "$ids"
+      for id in $ids; do
+        marker="azure-devops-work-item-id: $id"
 
-      {
-        echo "issue-ids<<EOF"
-        printf '%s\n' "$ids"
-        echo "EOF"
-      } >> "$GITHUB_OUTPUT"
-    shell: bash
+        existing="$(
+          gh api --paginate \
+            "/repos/$TARGET_REPO/issues?state=all&labels=azure-devops&per_page=100" \
+            --jq "[.[] | select((.body // \"\") | contains(\"$marker\"))] | length" \
+            | paste -sd+ - \
+            | bc
+        )"
+        if [ "${existing:-0}" -gt 0 ]; then
+          echo "Skipping work item $id; GitHub issue already exists."
+          continue
+        fi
+
+        item="$(
+          ado_call "$ADO_ORG/$ADO_PROJECT/_apis/wit/workitems/$id?api-version=7.1"
+        )"
+
+        title="$(jq -r '.fields["System.Title"] // "Untitled work item"' <<<"$item")"
+        state="$(jq -r '.fields["System.State"] // "Unknown"' <<<"$item")"
+        type="$(jq -r '.fields["System.WorkItemType"] // "Unknown"' <<<"$item")"
+        description="$(jq -r '.fields["System.Description"] // "_No description provided._"' <<<"$item")"
+        url="$ADO_ORG/$ADO_PROJECT/_workitems/edit/$id"
+
+        body="$(
+          jq -rn \
+            --arg marker "$marker" \
+            --arg url "$url" \
+            --arg id "$id" \
+            --arg type "$type" \
+            --arg state "$state" \
+            --arg description "$description" \
+            '"<!-- " + $marker + " -->\n\n"
+              + "Synced from Azure DevOps: " + $url + "\n\n"
+              + "## Azure DevOps details\n\n"
+              + "| Field | Value |\n| --- | --- |\n"
+              + "| ID | " + $id + " |\n"
+              + "| Type | " + $type + " |\n"
+              + "| State | " + $state + " |\n\n"
+              + "## Description\n\n" + $description'
+        )"
+
+        payload="$(
+          jq -n \
+            --arg title "[ADO #$id] $title" \
+            --arg body "$body" \
+            '{title: $title, body: $body,
+              labels: ["azure-devops", "copilot"],
+              assignees: ["Copilot"]}'
+        )"
+
+        issue_number="$(
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/$TARGET_REPO/issues" \
+            --input - <<<"$payload" \
+            --jq '.number'
+        )"
+
+        echo "Created GitHub issue #$issue_number for work item $id."
+        created+=("$issue_number")
+      done
+
+      if [ "${#created[@]}" -gt 0 ]; then
+        joined="$(IFS=,; echo "${created[*]}")"
+      else
+        joined=""
+      fi
+      echo "issue-numbers=$joined" >> "$GITHUB_OUTPUT"
