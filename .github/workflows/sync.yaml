@@ -1,32 +1,57 @@
-name: Sync Azure DevOps to GitHub
+name: Sync Azure DevOps work items
 
 on:
   workflow_dispatch: { }
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
   issues: write
-  pull-requests: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
-    - name: Require a Copilot user token
+    - name: Check out repository
+      uses: actions/checkout@v6
+    - name: Validate workflow configuration
       env:
+        AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        AZURE_DEVOPS_LABEL: ${{ vars.AZURE_DEVOPS_LABEL }}
+        AZURE_DEVOPS_PROJECT: ${{ vars.AZURE_DEVOPS_PROJECT }}
+        AZURE_DEVOPS_URL: ${{ vars.AZURE_DEVOPS_URL }}
+        AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         COPILOT_USER_TOKEN: ${{ secrets.COPILOT_USER_TOKEN }}
       run: |
-        if [ -z "$COPILOT_USER_TOKEN" ]; then
-          echo "::error::Set the COPILOT_USER_TOKEN repository secret to a user token. GITHUB_TOKEN cannot assign issues to Copilot."
+        set -euo pipefail
+
+        missing=()
+
+        for name in \
+          AZURE_CLIENT_ID \
+          AZURE_DEVOPS_LABEL \
+          AZURE_DEVOPS_PROJECT \
+          AZURE_DEVOPS_URL \
+          AZURE_TENANT_ID \
+          COPILOT_USER_TOKEN
+        do
+          if [ -z "${!name}" ]; then
+            missing+=("$name")
+          fi
+        done
+
+        if [ "${#missing[@]}" -gt 0 ]; then
+          echo "::error::Set the following repository secrets or variables before running this workflow: ${missing[*]}"
           exit 1
         fi
-    - uses: ./.
+
+        echo "::notice::GITHUB_TOKEN cannot assign issues to Copilot; COPILOT_USER_TOKEN must be a user token."
+    - name: Sync Azure DevOps work items to GitHub
+      uses: ./.
       with:
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        azure-devops-url: https://dev.azure.com/honestempire
-        azure-devops-project: website
-        azure-devops-label: "copilot:ready"
+        azure-devops-url: ${{ vars.AZURE_DEVOPS_URL }}
+        azure-devops-project: ${{ vars.AZURE_DEVOPS_PROJECT }}
+        azure-devops-label: ${{ vars.AZURE_DEVOPS_LABEL }}
         azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         github-token: ${{ secrets.COPILOT_USER_TOKEN }}

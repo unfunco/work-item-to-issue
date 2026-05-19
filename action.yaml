@@ -1,5 +1,5 @@
-name: Create Work Item
-description: Create GitHub Issues from Azure DevOps Work Items.
+name: Sync Azure DevOps work items
+description: Sync Azure DevOps work items to GitHub issues and assign them to Copilot.
 
 inputs:
   azure-devops-url:
@@ -12,10 +12,10 @@ inputs:
     description: The Azure DevOps tag used to select work items.
     required: true
   azure-client-id:
-    description: The client ID of the Azure AD application used for OIDC login.
+    description: The client ID of the Azure Entra application used for OIDC login.
     required: true
   azure-tenant-id:
-    description: The tenant ID of the Azure AD application used for OIDC login.
+    description: The tenant ID of the Azure Entra application used for OIDC login.
     required: true
   github-token:
     description: User token with permission to create issues and assign them to Copilot on the target repository.
@@ -33,6 +33,25 @@ outputs:
 runs:
   using: composite
   steps:
+  - name: Validate action inputs
+    shell: bash
+    env:
+      ADO_LABEL: ${{ inputs.azure-devops-label }}
+      GH_TOKEN: ${{ inputs.github-token }}
+    run: |
+      set -euo pipefail
+
+      if [ -z "$GH_TOKEN" ]; then
+        echo "::error::The github-token input is required."
+        exit 1
+      fi
+
+      case "$ADO_LABEL" in
+        *\"*|*\\*)
+          echo "::error::The azure-devops-label input cannot contain double quotes or backslashes."
+          exit 1
+          ;;
+      esac
   - name: Configure Azure credentials
     uses: azure/login@v3
     with:
@@ -112,6 +131,7 @@ runs:
 
       for id in $ids; do
         marker="azure-devops-work-item-id: $id"
+        marker_comment="<!-- $marker -->"
 
         item="$(
           ado_call "$ADO_ORG/$ADO_PROJECT/_apis/wit/workitems/$id?api-version=7.1"
@@ -125,27 +145,27 @@ runs:
 
         body="$(
           jq -rn \
-            --arg marker "$marker" \
+            --arg marker_comment "$marker_comment" \
             --arg url "$url" \
             --arg id "$id" \
             --arg type "$type" \
             --arg state "$state" \
             --arg description "$description" \
-            '"<!-- " + $marker + " -->\n\n"
+            '($marker_comment + "\n\n"
               + "Synced from Azure DevOps: " + $url + "\n\n"
               + "## Azure DevOps details\n\n"
               + "| Field | Value |\n| --- | --- |\n"
               + "| ID | " + $id + " |\n"
               + "| Type | " + $type + " |\n"
-               + "| State | " + $state + " |\n\n"
-               + "## Description\n\n" + $description'
+              + "| State | " + $state + " |\n\n"
+              + "## Description\n\n" + $description)'
         )"
 
         issue_title="[ADO #$id] $title"
         existing_issue_number="$(
           gh api --paginate \
             "/repos/$TARGET_REPO/issues?state=all&labels=azure-devops&per_page=100" \
-            --jq ".[] | select((.body // \"\") | contains(\"$marker\")) | .number" \
+            --jq ".[] | select((.body // \"\") | contains(\"$marker_comment\")) | .number" \
             | head -n 1
         )"
 
