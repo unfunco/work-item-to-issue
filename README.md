@@ -2,6 +2,7 @@
 
 A GitHub Action that syncs Azure DevOps work items to GitHub issues, with
 optional assignment to Copilot for automated coding.
+Use it to keep planning in Azure DevOps while executing work in GitHub.
 
 ```yaml
 name: Sync Azure DevOps work items
