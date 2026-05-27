@@ -32,6 +32,10 @@ jobs:
           github-token: ${{ secrets.COPILOT_USER_TOKEN }}
 ```
 
+## Random Quote
+
+> “Simplicity is prerequisite for reliability.” — Edsger W. Dijkstra
+
 ## License
 
 © 2026 [Daniel Morris]\
