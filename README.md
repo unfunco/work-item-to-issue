@@ -32,6 +32,10 @@ jobs:
           github-token: ${{ secrets.COPILOT_USER_TOKEN }}
 ```
 
+## Random quote
+
+> “First, solve the problem. Then, write the code.” — John Johnson
+
 ## License
 
 © 2026 [Daniel Morris]\
