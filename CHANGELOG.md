@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.1](https://github.com/unfunco/work-item-to-issue/compare/v0.1.0...v0.1.1) (2026-09-27)
+
+
+### 🧹 Miscellaneous
+
+* Use ubuntu-slim runner ([#10](https://github.com/unfunco/work-item-to-issue/issues/10)) ([ebcc9d1](https://github.com/unfunco/work-item-to-issue/commit/ebcc9d1f09298392b0038364fbfb7e7cffee89b4))
+* Use unfunco/meta v0.2.0 release-please workflow ([#20](https://github.com/unfunco/work-item-to-issue/issues/20)) ([899a202](https://github.com/unfunco/work-item-to-issue/commit/899a2020852f759432205bf7c0d662816fab9ef2))
+* Use unfunco/meta v0.3.0 release-please workflow ([#21](https://github.com/unfunco/work-item-to-issue/issues/21)) ([a479ab5](https://github.com/unfunco/work-item-to-issue/commit/a479ab544ce0527d6e776ecc6235dfbb874f8efc))
+
 ## 0.1.0 (2026-05-19)
 
 
