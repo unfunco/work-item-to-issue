@@ -57,7 +57,7 @@ runs:
           ;;
       esac
   - name: Configure Azure credentials
-    uses: azure/login@v3
+    uses: azure/login@v3.1.0
     with:
       client-id: ${{ inputs.azure-client-id }}
       tenant-id: ${{ inputs.azure-tenant-id }}
