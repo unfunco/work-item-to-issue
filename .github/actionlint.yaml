@@ -1,0 +1,4 @@
+paths:
+  .github/workflows/sync.yaml:
+    ignore:
+      - 'specifying action "\$/\." in invalid format'

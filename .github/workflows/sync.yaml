@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-slim
     steps:
     - name: Check out repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v6.1.0
     - name: Validate workflow configuration
       env:
         AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -47,7 +47,7 @@ jobs:
 
         echo "::notice::GITHUB_TOKEN cannot assign issues to Copilot; COPILOT_USER_TOKEN must be a user token."
     - name: Sync Azure DevOps work items to GitHub
-      uses: ./.
+      uses: $/.
       with:
         azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
         azure-devops-url: ${{ vars.AZURE_DEVOPS_URL }}
